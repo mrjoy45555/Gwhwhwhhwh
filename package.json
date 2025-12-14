@@ -14,6 +14,7 @@
     "aes-js": "^3.1.2",
     "axios": "^1.6.5",
     "bluebird": "^3.7.2",
+    "canvas": "^2.11.2",
     "chalk": "^4.1.2",
     "chalkercli": "^1.6.0",
     "cheerio": "^0.22.0",
