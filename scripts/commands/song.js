@@ -1,17 +1,15 @@
 const fs = require('fs');
-const { createCanvas, loadImage } = require("canvas");
-const joy = require("joy-video-downloader"); 
+const joy = require("joy-video-downloader");
 const axios = require("axios");
 const Youtube = require('youtube-search-api');
 
 async function downloadMusicFromYoutube(link, path) {
     if (!link) return 'Link Not Found';
-
     const timestart = Date.now();
 
     try {
-        const data = await joy.ytdown(link);
-        const audioUrl = data.data.audio;
+        const data = await joy.download(link); // latest method
+        const audioUrl = data.audio; // audio URL from joy module
 
         return new Promise((resolve, reject) => {
             axios({
@@ -21,14 +19,7 @@ async function downloadMusicFromYoutube(link, path) {
             }).then(response => {
                 const writeStream = fs.createWriteStream(path);
                 response.data.pipe(writeStream)
-                    .on('finish', async () => {
-                        try {
-                            const info = await joy.ytdown(link);
-                            resolve({ title: info.data.title, timestart });
-                        } catch (error) {
-                            reject(error);
-                        }
-                    })
+                    .on('finish', () => resolve({ title: data.title, timestart }))
                     .on('error', reject);
             }).catch(reject);
         });
@@ -40,7 +31,7 @@ async function downloadMusicFromYoutube(link, path) {
 module.exports = {
     config: {
         name: "song",
-        version: "1.2.0",
+        version: "1.3.0",
         permission: 0,
         credits: "Joy",
         description: "Download songs from YouTube directly via keyword or link",
@@ -50,8 +41,7 @@ module.exports = {
         cooldowns: 5,
         dependencies: {
             "axios": "",
-            "fs": "",
-            "canvas": ""
+            "fs": ""
         }
     },
 
@@ -69,17 +59,18 @@ module.exports = {
             if (!keywordSearch.startsWith("https://")) {
                 // keyword => first YouTube result
                 const data = (await Youtube.GetListByKeyword(keywordSearch, false, 1)).items;
-                if (!data || data.length === 0) return api.sendMessage('❌ কোন গান পাওয়া যায়নি!', event.threadID, event.messageID);
+                if (!data || data.length === 0) 
+                    return api.sendMessage('❌ কোন গান পাওয়া যায়নি!', event.threadID, event.messageID);
                 link = 'https://www.youtube.com/watch?v=' + data[0].id;
             }
 
-            const data = await downloadMusicFromYoutube(link, path);
+            const musicData = await downloadMusicFromYoutube(link, path);
 
             if (fs.statSync(path).size > 26214400)
                 return api.sendMessage('❌ ফাইল 25MB এর বেশি হওয়ায় পাঠানো যাবে না।', event.threadID, () => fs.unlinkSync(path), event.messageID);
 
             return api.sendMessage({
-                body: `🎵 Title: ${data.title}\n⏱️ Processing time: ${Math.floor((Date.now() - data.timestart) / 1000)} sec\n💿====DISME PROJECT====💿`,
+                body: `🎵 Title: ${musicData.title}\n⏱️ Processing time: ${Math.floor((Date.now() - musicData.timestart) / 1000)} sec\n💿====DISME PROJECT====💿`,
                 attachment: fs.createReadStream(path)
             }, event.threadID, () => fs.unlinkSync(path), event.messageID);
 
