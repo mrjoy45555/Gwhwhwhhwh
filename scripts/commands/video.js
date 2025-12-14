@@ -4,24 +4,10 @@ const axios = require("axios");
 const joy = require("joy-video-downloader");
 const Youtube = require('youtube-search-api');
 
-// ✅ Full-proof Safe URL function
+// ✅ Safe URL function
 function safeUrl(url) {
   if (!url) return url;
-  return url
-    .trim()
-    .replace(/ /g, "%20")
-    .replace(/#/g, "%23")
-    .replace(/{/g, "%7B")
-    .replace(/}/g, "%7D")
-    .replace(/\|/g, "%7C")
-    .replace(/\[/g, "%5B")
-    .replace(/\]/g, "%5D")
-    .replace(/\\/g, "%5C")
-    .replace(/\^/g, "%5E")
-    .replace(/`/g, "%60")
-    .replace(/</g, "%3C")
-    .replace(/>/g, "%3E")
-    .replace(/"/g, "%22");
+  return encodeURI(url).replace(/#/g,"%23").replace(/\+/g,"%2B");
 }
 
 async function downloadVideoFromYoutube(link, path) {
@@ -34,7 +20,7 @@ async function downloadVideoFromYoutube(link, path) {
     const videoUrlRaw = data.videoUrl || data.url;
     if (!videoUrlRaw) throw new Error("❌ Video URL not found.");
 
-    const videoUrl = safeUrl(videoUrlRaw); // ✅ Safe URL fix
+    const videoUrl = safeUrl(videoUrlRaw);
 
     return new Promise((resolve, reject) => {
       axios({
@@ -46,20 +32,14 @@ async function downloadVideoFromYoutube(link, path) {
         const writeStream = fs.createWriteStream(path);
         response.data.pipe(writeStream)
           .on('finish', async () => {
-            try {
-              const info = await joy.downloadVideo(link);
-              const result = {
-                title: info.title,
-                timestart: timestart
-              };
-              resolve(result);
-            } catch (error) {
-              reject(error);
-            }
+            resolve({
+              title: data.title,
+              timestart
+            });
           })
-          .on('error', (error) => reject(error));
+          .on('error', err => reject(err));
       })
-      .catch(error => reject(error));
+      .catch(err => reject(err));
     });
 
   } catch (error) {
@@ -70,7 +50,7 @@ async function downloadVideoFromYoutube(link, path) {
 module.exports = {
   config: {
     name: "video",
-    version: "2.6.0",
+    version: "3.0.0",
     permssion: 0,
     credits: "Joy",
     description: "Download YouTube videos (mp4) with collage thumbnails",
@@ -90,8 +70,8 @@ module.exports = {
   handleReply: async function ({ api, event, handleReply }) {
     const { createReadStream, unlinkSync, statSync } = require("fs-extra");
     try {
-      var path = `${__dirname}/cache/1.mp4`;
-      var data = await downloadVideoFromYoutube('https://www.youtube.com/watch?v=' + handleReply.link[event.body -1], path);
+      const path = `${__dirname}/cache/1.mp4`;
+      const data = await downloadVideoFromYoutube('https://www.youtube.com/watch?v=' + handleReply.link[event.body - 1], path);
 
       if (fs.statSync(path).size > 26214400)
         return api.sendMessage('❌ ভিডিও ফাইল 25MB এর বেশি হওয়ায় পাঠানো যাবে না।', event.threadID, () => fs.unlinkSync(path), event.messageID);
@@ -100,91 +80,84 @@ module.exports = {
       return api.sendMessage({
         body: `🎬 Title: ${data.title}\n⏱️ Processing time: ${Math.floor((Date.now() - data.timestart)/1000)} sec\n💿==DISME PROJECT=💿`,
         attachment: createReadStream(path)
-      },
-      event.threadID,
-      () => unlinkSync(path),
-      event.messageID);
-    }
-    catch (e) {
+      }, event.threadID, () => unlinkSync(path), event.messageID);
+
+    } catch (e) {
       console.log(e);
       return api.sendMessage('⚠️ ডাউনলোডে সমস্যা হয়েছে। আবার চেষ্টা করো!', event.threadID, event.messageID);
     }
   },
 
   run: async function ({ api, event, args }) {
-    if (args.length == 0 || !args)
+    if (!args.length)
       return api.sendMessage('» উফফ আবাল, কি ভিডিও দেখতে চাস? 🤔', event.threadID, event.messageID);
 
     const keywordSearch = args.join(" ");
-    var path = `${__dirname}/cache/1.mp4`;
+    const path = `${__dirname}/cache/1.mp4`;
     if (fs.existsSync(path)) fs.unlinkSync(path);
 
-    if (args.join(" ").indexOf("https://") == 0) {
+    if (args[0].startsWith("https://")) {
       // direct youtube link
       try {
-        var data = await downloadVideoFromYoutube(args.join(" "), path);
+        const data = await downloadVideoFromYoutube(args[0], path);
+
         if (fs.statSync(path).size > 26214400)
           return api.sendMessage('❌ ভিডিও ফাইল 25MB এর বেশি হওয়ায় পাঠানো যাবে না।', event.threadID, () => fs.unlinkSync(path), event.messageID);
 
         return api.sendMessage({
           body: `🎬 Title: ${data.title}\n⏱️ Processing time: ${Math.floor((Date.now() - data.timestart)/1000)} sec\n💿==DISME PROJECT=💿`,
           attachment: fs.createReadStream(path)
-        },
-        event.threadID,
-        () => fs.unlinkSync(path),
-        event.messageID);
+        }, event.threadID, () => fs.unlinkSync(path), event.messageID);
 
       } catch (e) {
         console.log(e);
         return api.sendMessage('⚠️ ডাউনলোডে সমস্যা হয়েছে। আবার চেষ্টা করো!', event.threadID, event.messageID);
       }
+
     } else {
       // search by keyword
       try {
-        var link = [], msg = "", num = 0;
-        var data = (await Youtube.GetListByKeyword(keywordSearch, false, 6)).items;
+        let link = [], msg = "", num = 0;
+        const data = (await Youtube.GetListByKeyword(keywordSearch, false, 6)).items;
 
         for (let value of data) {
           link.push(value.id);
-          num += 1;
+          num++;
           const duration = value.length?.simpleText || "❌ Unknown";
-          msg += (`${num} - ${value.title} (${duration})\n\n`);
+          msg += `${num} - ${value.title} (${duration})\n\n`;
         }
 
         // 🔥 ৬ টা থাম্বনেইল ক্যানভাসে আঁকা হচ্ছে
-        let images = [];
+        const images = [];
         for (let value of data) {
-          if (value.thumbnail?.thumbnails?.length > 0) {
-            let imgUrl = value.thumbnail.thumbnails[value.thumbnail.thumbnails.length - 1].url;
+          const thumbs = value.thumbnail?.thumbnails;
+          if (thumbs?.length > 0) {
             try {
-              let img = await loadImage(imgUrl);
+              const img = await loadImage(thumbs[thumbs.length - 1].url);
               images.push(img);
-            } catch (e) { console.log("Thumbnail load error:", e); }
+            } catch(e){ console.log("Thumbnail error:", e); }
           }
         }
 
-        // ক্যানভাস তৈরি (3x2 গ্রিড)
         const width = 640, height = 360;
         const canvas = createCanvas(width*3, height*2);
         const ctx = canvas.getContext("2d");
-
         ctx.fillStyle = "#000";
         ctx.fillRect(0,0,canvas.width,canvas.height);
 
-        for (let i = 0; i < images.length; i++) {
-          let x = (i % 3) * width;
-          let y = Math.floor(i / 3) * height;
+        for (let i=0; i<images.length; i++) {
+          const x = (i % 3) * width;
+          const y = Math.floor(i/3) * height;
           ctx.drawImage(images[i], x, y, width, height);
         }
 
-        const buffer = canvas.toBuffer("image/png");
         const imgPath = `${__dirname}/cache/collage.png`;
-        fs.writeFileSync(imgPath, buffer);
+        fs.writeFileSync(imgPath, canvas.toBuffer("image/png"));
 
-        var body = `🔍 Search results for: "${keywordSearch}"\n\n${msg}\n\n👉 Reply (number) to select which video you want to download.`;
+        const body = `🔍 Search results for: "${keywordSearch}"\n\n${msg}\n\n👉 Reply (number) to select which video you want to download.`;
 
         return api.sendMessage({
-          body: body,
+          body,
           attachment: fs.createReadStream(imgPath)
         }, event.threadID, (error, info) => {
           fs.unlinkSync(imgPath);
