@@ -1,8 +1,18 @@
 const fs = require('fs');
 const { createCanvas, loadImage } = require("canvas");
 const axios = require("axios");
-const joy = require("joy-video-downloader"); // Nazrul বাদ, Joy ব্যবহার
+const joy = require("joy-video-downloader");
 const Youtube = require('youtube-search-api');
+
+// ✅ Safe URL function
+function safeUrl(url) {
+  if (!url) return url;
+  return encodeURI(url)
+    .replace(/[#]/g, "%23")
+    .replace(/{/g, "%7B")
+    .replace(/}/g, "%7D")
+    .replace(/\|/g, "%7C");
+}
 
 async function downloadVideoFromYoutube(link, path) {
   if (!link) return 'Link Not Found';
@@ -10,11 +20,11 @@ async function downloadVideoFromYoutube(link, path) {
   const timestart = Date.now();
 
   try {
-    const data = await joy.downloadVideo(link); // Joy ব্যবহার
-    const videoUrlRaw = data.videoUrl || data.url; // ভিডিও URL
+    const data = await joy.downloadVideo(link);
+    const videoUrlRaw = data.videoUrl || data.url;
     if (!videoUrlRaw) throw new Error("❌ Video URL not found.");
 
-    const videoUrl = encodeURI(videoUrlRaw); // ✅ URL encode fix
+    const videoUrl = safeUrl(videoUrlRaw); // ✅ Safe URL fix
 
     return new Promise((resolve, reject) => {
       axios({
@@ -50,7 +60,7 @@ async function downloadVideoFromYoutube(link, path) {
 module.exports = {
   config: {
     name: "video",
-    version: "2.4.0",
+    version: "2.5.0",
     permssion: 0,
     credits: "Joy",
     description: "Download YouTube videos (mp4) with collage thumbnails",
@@ -127,7 +137,7 @@ module.exports = {
         for (let value of data) {
           link.push(value.id);
           num += 1;
-          const duration = value.length?.simpleText || "❌ Unknown"; // safe check
+          const duration = value.length?.simpleText || "❌ Unknown";
           msg += (`${num} - ${value.title} (${duration})\n\n`);
         }
 
