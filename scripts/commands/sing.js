@@ -13,7 +13,7 @@ const joyBase = async () => {
   return data;
 };
 
-// Get API URL (default: main api, type: "joy" for sing)
+// Get API URL with fallback
 const getApiUrl = async (type = "api") => {
   const cfg = await joyBase();
   return cfg[type] || cfg.api;
@@ -22,7 +22,7 @@ const getApiUrl = async (type = "api") => {
 // ========== Command config ==========
 module.exports.config = {
   name: "sing",
-  version: "2.4.0",
+  version: "2.5.0",
   aliases: ["music", "play"],
   credits: "joy",
   countDown: 5,
@@ -50,28 +50,33 @@ module.exports.run = async ({ api, args, event }) => {
     const match = args[0].match(checkurl);
     videoID = match ? match[1] : null;
 
+    let data;
     try {
       const apiUrl = await getApiUrl("joy"); // sing API
-      const {
-        data: { title, downloadLink },
-      } = await axios.get(`${apiUrl}/ytDl3?link=${videoID}&format=mp3`);
-
-      return api.sendMessage(
-        {
-          body: title,
-          attachment: await joy(downloadLink, "audio.mp3"),
-        },
-        event.threadID,
-        () => fs.unlinkSync("audio.mp3"),
-        event.messageID
-      );
+      data = (await axios.get(`${apiUrl}/ytDl3?link=${videoID}&format=mp3`)).data;
     } catch (err) {
-      return api.sendMessage(
-        "❌ Sing API Error or Download failed",
-        event.threadID,
-        event.messageID
-      );
+      console.log("Joy API failed, trying main API");
+      const fallbackUrl = await getApiUrl("api");
+      try {
+        data = (await axios.get(`${fallbackUrl}/ytDl3?link=${videoID}&format=mp3`)).data;
+      } catch (e) {
+        return api.sendMessage(
+          "❌ Both Sing and Main API failed: " + e.message,
+          event.threadID,
+          event.messageID
+        );
+      }
     }
+
+    return api.sendMessage(
+      {
+        body: data.title,
+        attachment: await joy(data.downloadLink, "audio.mp3"),
+      },
+      event.threadID,
+      () => fs.unlinkSync("audio.mp3"),
+      event.messageID
+    );
   }
 
   // ========== Search by keyword ==========
@@ -81,15 +86,19 @@ module.exports.run = async ({ api, args, event }) => {
 
   try {
     const apiUrl = await getApiUrl("joy"); // sing API
-    result = (
-      await axios.get(`${apiUrl}/ytFullSearch?songName=${keyWord}`)
-    ).data.slice(0, maxResults);
+    result = (await axios.get(`${apiUrl}/ytFullSearch?songName=${keyWord}`)).data.slice(0, maxResults);
   } catch (err) {
-    return api.sendMessage(
-      "❌ Sing API Error: " + err.message,
-      event.threadID,
-      event.messageID
-    );
+    console.log("Joy API failed, trying main API");
+    const fallbackUrl = await getApiUrl("api");
+    try {
+      result = (await axios.get(`${fallbackUrl}/ytFullSearch?songName=${keyWord}`)).data.slice(0, maxResults);
+    } catch (e) {
+      return api.sendMessage(
+        "❌ Both Sing and Main API search failed: " + e.message,
+        event.threadID,
+        event.messageID
+      );
+    }
   }
 
   if (!result.length)
@@ -139,17 +148,30 @@ module.exports.handleReply = async ({ event, api, handleReply }) => {
       const infoChoice = result[choice - 1];
       const idvideo = infoChoice.id;
 
-      const apiUrl = await getApiUrl("joy"); // sing API
-      const {
-        data: { title, downloadLink, quality },
-      } = await axios.get(`${apiUrl}/ytDl3?link=${idvideo}&format=mp3`);
+      let data;
+      try {
+        const apiUrl = await getApiUrl("joy"); // sing API
+        data = (await axios.get(`${apiUrl}/ytDl3?link=${idvideo}&format=mp3`)).data;
+      } catch (err) {
+        console.log("Joy API failed, trying main API");
+        const fallbackUrl = await getApiUrl("api");
+        try {
+          data = (await axios.get(`${fallbackUrl}/ytDl3?link=${idvideo}&format=mp3`)).data;
+        } catch (e) {
+          return api.sendMessage(
+            "❌ Both Sing and Main API failed: " + e.message,
+            event.threadID,
+            event.messageID
+          );
+        }
+      }
 
       await api.unsendMessage(handleReply.messageID);
 
       await api.sendMessage(
         {
-          body: `• Title: ${title}\n• Quality: ${quality}`,
-          attachment: await joy(downloadLink, "audio.mp3"),
+          body: `• Title: ${data.title}\n• Quality: ${data.quality}`,
+          attachment: await joy(data.downloadLink, "audio.mp3"),
         },
         event.threadID,
         () => fs.unlinkSync("audio.mp3"),
@@ -165,7 +187,7 @@ module.exports.handleReply = async ({ event, api, handleReply }) => {
   } catch (error) {
     console.log(error);
     api.sendMessage(
-      "⭕ Sorry, audio size exceeded 26MB or Sing API error",
+      "⭕ Sorry, audio size exceeded 26MB or API error",
       event.threadID,
       event.messageID
     );
