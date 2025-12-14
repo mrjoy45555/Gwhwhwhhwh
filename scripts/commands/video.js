@@ -4,14 +4,24 @@ const axios = require("axios");
 const joy = require("joy-video-downloader");
 const Youtube = require('youtube-search-api');
 
-// ✅ Safe URL function
+// ✅ Full-proof Safe URL function
 function safeUrl(url) {
   if (!url) return url;
-  return encodeURI(url)
-    .replace(/[#]/g, "%23")
+  return url
+    .trim()
+    .replace(/ /g, "%20")
+    .replace(/#/g, "%23")
     .replace(/{/g, "%7B")
     .replace(/}/g, "%7D")
-    .replace(/\|/g, "%7C");
+    .replace(/\|/g, "%7C")
+    .replace(/\[/g, "%5B")
+    .replace(/\]/g, "%5D")
+    .replace(/\\/g, "%5C")
+    .replace(/\^/g, "%5E")
+    .replace(/`/g, "%60")
+    .replace(/</g, "%3C")
+    .replace(/>/g, "%3E")
+    .replace(/"/g, "%22");
 }
 
 async function downloadVideoFromYoutube(link, path) {
@@ -60,7 +70,7 @@ async function downloadVideoFromYoutube(link, path) {
 module.exports = {
   config: {
     name: "video",
-    version: "2.5.0",
+    version: "2.6.0",
     permssion: 0,
     credits: "Joy",
     description: "Download YouTube videos (mp4) with collage thumbnails",
