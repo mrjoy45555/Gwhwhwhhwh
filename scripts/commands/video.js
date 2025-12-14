@@ -1,7 +1,7 @@
 const fs = require('fs');
 const { createCanvas, loadImage } = require("canvas");
 const axios = require("axios");
-const joy = require("joy-video-downloader"); // Nazrul বাদ, সরাসরি Joy
+const joy = require("joy-video-downloader"); // Nazrul বাদ, Joy ব্যবহার
 const Youtube = require('youtube-search-api');
 
 async function downloadVideoFromYoutube(link, path) {
@@ -11,9 +11,10 @@ async function downloadVideoFromYoutube(link, path) {
 
   try {
     const data = await joy.downloadVideo(link); // Joy ব্যবহার
-    const videoUrl = data.videoUrl || data.url; // ভিডিও URL
+    const videoUrlRaw = data.videoUrl || data.url; // ভিডিও URL
+    if (!videoUrlRaw) throw new Error("❌ Video URL not found.");
 
-    if (!videoUrl) throw new Error("❌ Video URL not found.");
+    const videoUrl = encodeURI(videoUrlRaw); // ✅ URL encode fix
 
     return new Promise((resolve, reject) => {
       axios({
@@ -49,7 +50,7 @@ async function downloadVideoFromYoutube(link, path) {
 module.exports = {
   config: {
     name: "video",
-    version: "2.3.0",
+    version: "2.4.0",
     permssion: 0,
     credits: "Joy",
     description: "Download YouTube videos (mp4) with collage thumbnails",
@@ -78,10 +79,10 @@ module.exports = {
       api.unsendMessage(handleReply.messageID);
       return api.sendMessage({
         body: `🎬 Title: ${data.title}\n⏱️ Processing time: ${Math.floor((Date.now() - data.timestart)/1000)} sec\n💿==DISME PROJECT=💿`,
-        attachment: fs.createReadStream(path)
+        attachment: createReadStream(path)
       },
       event.threadID,
-      () => fs.unlinkSync(path),
+      () => unlinkSync(path),
       event.messageID);
     }
     catch (e) {
