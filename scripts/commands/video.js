@@ -1,7 +1,7 @@
 module.exports.config = {
     name: "video",
-    version: "1.1.0",
-    credits: "joy", // এখানে credit joy দেওয়া হলো
+    version: "1.2.0",
+    credits: "joy",
     permission: 0,
     description: "YouTube থেকে ভিডিও সার্চ করে সিলেক্ট করা ভিডিও ডাউনলোড করে পাঠায় এবং লিস্ট আনসেন্ড করে।",
     category: "ডাউনলোডার",
@@ -41,7 +41,7 @@ module.exports.run = async ({ api, event, args }) => {
         api.sendMessage(message, event.threadID, async (err, info) => {
             if (err) return console.log(err);
 
-            const listMessageID = info.messageID; // পাঠানো লিস্ট মেসেজের ID
+            const listMessageID = info.messageID; // লিস্ট মেসেজ ID
 
             const handleReply = async (replyEvent) => {
                 if (replyEvent.senderID !== event.senderID) return;
@@ -57,34 +57,43 @@ module.exports.run = async ({ api, event, args }) => {
                 const selectedVideoUrl = videos[num - 1].url;
                 api.sendMessage("⬇️ ভিডিও ডাউনলোড হচ্ছে...", event.threadID);
 
-                const info = await joy.ytdown(selectedVideoUrl);
-                if (!info || !info.url) return api.sendMessage("❌ ভিডিও ডাউনলোড করা যায়নি।", event.threadID);
+                try {
+                    const info = await joy.ytdown(selectedVideoUrl);
+                    if (!info || !info.url) return api.sendMessage("❌ ভিডিও ডাউনলোড করা যায়নি।", event.threadID);
 
-                const fileExt = info.url.includes(".mp3") ? "mp3" : "mp4";
-                const fileName = `${info.title}.${fileExt}`.replace(/[/\\?%*:|"<>]/g, "-");
-                const filePath = path.join(__dirname, fileName);
+                    const fileExt = info.url.includes(".mp3") ? "mp3" : "mp4";
+                    const fileName = `${info.title}.${fileExt}`.replace(/[/\\?%*:|"<>]/g, "-");
+                    const filePath = path.join(__dirname, fileName);
 
-                const response = await axios({
-                    url: info.url,
-                    method: "GET",
-                    responseType: "stream"
-                });
+                    const response = await axios({
+                        url: info.url,
+                        method: "GET",
+                        responseType: "stream"
+                    });
 
-                const writer = fs.createWriteStream(filePath);
-                response.data.pipe(writer);
+                    const writer = fs.createWriteStream(filePath);
+                    response.data.pipe(writer);
 
-                writer.on("finish", () => {
-                    api.sendMessage({ body: `✅ ডাউনলোড সম্পন্ন: ${fileName}\n💡 Credit: joy`, attachment: fs.createReadStream(filePath) }, event.threadID);
-                    api.removeListener("message", handleReply);
-                });
+                    writer.on("finish", () => {
+                        api.sendMessage({
+                            body: `✅ ডাউনলোড সম্পন্ন: ${fileName}\n💡 Credit: joy`,
+                            attachment: fs.createReadStream(filePath)
+                        }, event.threadID);
+                        api.removeListener("message", handleReply);
+                    });
 
-                writer.on("error", (err) => {
+                    writer.on("error", (err) => {
+                        api.sendMessage(`❌ ত্রুটি: ${err.message}`, event.threadID);
+                        api.removeListener("message", handleReply);
+                    });
+
+                } catch (err) {
                     api.sendMessage(`❌ ত্রুটি: ${err.message}`, event.threadID);
                     api.removeListener("message", handleReply);
-                });
+                }
             };
 
-            api.listen("message", handleReply); // Bot framework অনুযায়ী পরিবর্তন করুন
+            api.listen("message", handleReply); // আপনার bot framework অনুযায়ী adjust করুন
         });
 
     } catch (err) {
